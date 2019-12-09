@@ -340,6 +340,25 @@ func (c *cluster) ScaleDown() error {
 	}
 
 	poolCfgKey, _ := client.ObjectKeyFromObject(poolCfg)
+	err = c.client.Get(context.TODO(), poolCfgKey, poolCfg)
+	if client.IgnoreNotFound(err) != nil {
+		return err
+	}
+
+	if err == nil { // gke-weekend-downscaler-pool-config exists, let's check the node count
+		nodes := corev1.NodeList{}
+		err := c.client.List(context.TODO(), &nodes)
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		if len(nodes.Items) != 0 {
+			return fmt.Errorf("kube-system/gke-weekend-downscaler-pool-config exists but %d nodes still exist", len(nodes.Items))
+		} else {
+			log.Printf("[%s] cluster already scaled down. skipping", c.FQName)
+			return nil
+		}
+	}
+
 	log.Printf("[%s] creating configmap %s", c.FQName, poolCfgKey)
 	if !c.dryRun {
 		err = c.client.Create(context.TODO(), poolCfg)
