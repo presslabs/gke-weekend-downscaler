@@ -1,0 +1,45 @@
+---
+kind: pipeline
+name: build
+
+workspace:
+  base: /root/go
+  path: src/github.com/presslabs/gke-weekend-downscaler
+
+steps:
+- name: build
+  image: quay.io/presslabs/bfc
+  environment:
+    GO111MODULE: on
+  commands:
+    - env
+    - mkdir -p /root/go/bin
+    - go build -o /root/go/bin/gke-weekend-downscaler cmd/downscaler/main.go
+
+- &cron
+  name: scale-down
+  image: quay.io/presslabs/bfc
+  environment:
+    DOWNSCALER_ACTION: scale-down
+    GOOGLE_CREDENTIALS:
+      from_secret: GOOGLE_CREDENTIALS
+  commands:
+    - /usr/local/bin/setup-credentials-helper.sh
+    - gke-weekend-downscaler $DOWNSCALER_ACTION
+      -m '**/staging-reactor/*'
+      -m '**/testing-reactor/*'
+      -m '*folders/194394879849/**'
+      -m '**/dashboard-staging-reactor/*'
+  when:
+    event:
+    - cron
+    cron:
+    - scale-down
+
+- <<: *cron
+  name: scale-up
+  environment:
+    DOWNSCALER_ACTION: scale-up
+  when:
+    cron:
+      - scale-up
