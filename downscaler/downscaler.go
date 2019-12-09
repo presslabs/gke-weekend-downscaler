@@ -147,45 +147,43 @@ func (w *weekendDownscaler) getClustersForProject(projectFQName string) ([]*clus
 }
 
 func (w *weekendDownscaler) getClusters() ([]*cluster, error) {
-	// These calls take a lot of time, even for a small number of projects, so let's parallelize
-	projectsC := make(chan string)
-	done := make(chan struct{})
-	clusters := []*cluster{}
-	var wg sync.WaitGroup
 	var mux sync.Mutex
-
-	for i := 0; i < workers; i++ {
-		go func(worker int) {
-			wg.Add(1)
-			defer wg.Done()
-
-			for {
-				select {
-				case p := <-projectsC:
-					cl, err := w.getClustersForProject(p)
-					if err != nil {
-						log.Fatal(err) // short-circuit here, for dev speed
-					}
-					mux.Lock()
-					clusters = append(cl, clusters...)
-					mux.Unlock()
-				case <-done:
-					return
-				}
-			}
-		}(i)
-	}
+	clusters := []*cluster{}
 
 	projects, err := w.getProjects()
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range projects {
-		projectsC <- p
+	if len(projects) == 0 {
+		return clusters, nil
 	}
-	close(done)
-	wg.Wait()
 
+	wq := NewWorkqueue(len(projects), workers, func(j Job) error {
+		p, ok := j.(string)
+		if !ok {
+			log.Fatalf("cannot convert %T to string", j)
+		}
+		cl, err := w.getClustersForProject(p)
+		if err != nil {
+			return err
+		}
+		mux.Lock()
+		clusters = append(cl, clusters...)
+		mux.Unlock()
+		return nil
+	})
+
+	for _, p := range projects {
+		if !wq.Enqueue(p) {
+			return nil, fmt.Errorf("getClusters() queue full")
+		}
+	}
+	wq.Wait()
+	for err = range wq.Errors() {
+		if err != nil {
+			return nil, err
+		}
+	}
 	return clusters, nil
 }
 
@@ -194,22 +192,35 @@ func (w *weekendDownscaler) ScaleUp() error {
 	if err != nil {
 		return err
 	}
-	for _, c := range clusters {
+	wq := NewWorkqueue(len(clusters), workers, func(j Job) error {
+		c, ok := j.(*cluster)
+		if !ok {
+			log.Fatalf("cannot convert %T to cluster", j)
+		}
 		if w.match(c.FQName) {
-			if w.dryRun {
-				log.Printf("[%s] scaling up cluster [dry-run]", c.FQName)
-			} else {
-				log.Printf("[%s] scaling up cluster", c.FQName)
-			}
+			log.Printf("[%s] [dry-run=%t] scaling up cluster", c.FQName, w.dryRun)
 			err := c.ScaleUp()
 			if err != nil {
 				return err
 			}
-			log.Printf("[%s] successfully scaled up cluster", c.FQName)
-		} else {
-			log.Printf("[%s] skipping cluster", c.FQName)
+			log.Printf("[%s] [dry-run=%t] successfully scaled up cluster", c.FQName, w.dryRun)
+		}
+		return nil
+	})
+
+	for _, c := range clusters {
+		if !wq.Enqueue(c) {
+			return fmt.Errorf("ScaleUp() queue full")
 		}
 	}
+
+	wq.Wait()
+	for err = range wq.Errors() {
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -218,22 +229,35 @@ func (w *weekendDownscaler) ScaleDown() error {
 	if err != nil {
 		return err
 	}
-	for _, c := range clusters {
+	wq := NewWorkqueue(len(clusters), workers, func(j Job) error {
+		c, ok := j.(*cluster)
+		if !ok {
+			log.Fatalf("cannot convert %T to cluster", j)
+		}
 		if w.match(c.FQName) {
-			if w.dryRun {
-				log.Printf("[%s] scaling down cluster [dry-run]", c.FQName)
-			} else {
-				log.Printf("[%s] scaling down cluster", c.FQName)
-			}
+			log.Printf("[%s] [dry-run=%t] scaling down cluster", c.FQName, w.dryRun)
 			err := c.ScaleDown()
 			if err != nil {
 				return err
 			}
-			log.Printf("[%s] successfully scaled down cluster", c.FQName)
-		} else {
-			log.Printf("[%s] skipping cluster", c.FQName)
+			log.Printf("[%s] [dry-run=%t] successfully scaled down cluster", c.FQName, w.dryRun)
+		}
+		return nil
+	})
+
+	for _, c := range clusters {
+		if !wq.Enqueue(c) {
+			return fmt.Errorf("ScaleDown() queue full")
 		}
 	}
+
+	wq.Wait()
+	for err = range wq.Errors() {
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
