@@ -5,7 +5,7 @@ go 1.13
 require (
 	cloud.google.com/go v0.49.0
 	github.com/gobwas/glob v0.2.3
-	github.com/spf13/cobra v0.0.5
+	github.com/spf13/cobra v0.0.6-0.20191202130430-b04b5bfc50cb
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	google.golang.org/api v0.14.0
 	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f
