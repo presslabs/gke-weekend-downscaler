@@ -1,8 +1,20 @@
 package downscaler
 
 import (
+	"net/http"
+
+	"google.golang.org/api/googleapi"
+
 	corev1 "k8s.io/api/core/v1"
 )
+
+func IsForbidden(err error) bool {
+	if err == nil {
+		return false
+	}
+	ae, ok := err.(*googleapi.Error)
+	return ok && ae.Code == http.StatusForbidden
+}
 
 func upsertTaint(taint corev1.Taint, taints []corev1.Taint) []corev1.Taint {
 	for i := range taints {

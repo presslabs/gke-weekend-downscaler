@@ -71,6 +71,10 @@ func (w *weekendDownscaler) getParentPath(res *resourcemanagerv1.ResourceId) (st
 		if !exists {
 			folder, err = w.resourceManagerV2Client.Folders.Get(path.Join("folders", res.Id)).Do()
 			if err != nil {
+				if IsForbidden(err) {
+					log.Printf("cannot get parent resource folders/%s. skipping", res.Id)
+					return "", nil
+				}
 				return "", err
 			}
 			w.folderCache[res.Id] = folder
@@ -124,7 +128,12 @@ func (w *weekendDownscaler) getClustersForProject(projectFQName string) ([]*clus
 	_, projectId := path.Split(projectFQName)
 	list, err := w.gkeClient.Projects.Locations.Clusters.List(fmt.Sprintf("projects/%s/locations/-", projectId)).Do()
 	if err != nil {
-		return nil, err
+		if IsForbidden(err) {
+			log.Printf("listing clusters for %s is forbidden. skipping", projectFQName)
+			return nil, nil
+		} else {
+			return nil, err
+		}
 	}
 	for _, c := range list.Clusters {
 		fqName := path.Join(projectFQName, c.Name)
