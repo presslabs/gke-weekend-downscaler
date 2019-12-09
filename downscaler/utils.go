@@ -20,6 +20,7 @@ func upsertTaint(taint corev1.Taint, taints []corev1.Taint) []corev1.Taint {
 	for i := range taints {
 		if taints[i].Key == taint.Key && taints[i].Value == taint.Value {
 			taints[i].Effect = taint.Effect
+			return taints
 		}
 	}
 	return append(taints, taint)

@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gkev1 "google.golang.org/api/container/v1"
+	"path"
 )
 
 const (
@@ -139,7 +140,9 @@ func (c *cluster) nodePoolInfo(pool *gkev1.NodePool) (nodePoolInfo, error) {
 }
 
 func (c *cluster) getNodePoolID(pool *gkev1.NodePool) string {
-	return strings.TrimPrefix(pool.SelfLink, c.gkeClient.BasePath+"v1/")
+	projectName := path.Base(path.Dir(c.FQName))
+	name := fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectName, c.Cluster.Location, c.Cluster.Name, pool.Name)
+	return name
 }
 
 func (c *cluster) disableAutoscaling(pool *gkev1.NodePool) error {
