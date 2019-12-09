@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/araddon/dateparse"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -30,12 +32,20 @@ type nodePoolInfo struct {
 	NumNodes    int   `json:"numNodes"`
 }
 
+type clusterConfig struct {
+	DisabledUntil  time.Time
+	ScaleUpAfter   time.Time
+	ScaleDownAfter time.Time
+}
+
 type cluster struct {
 	FQName     string
 	Cluster    *gkev1.Cluster
 	RESTConfig *rest.Config
 	client     client.Client
 	gkeClient  *gkev1.Service
+
+	cfg clusterConfig
 
 	dryRun bool
 }
@@ -69,6 +79,11 @@ func NewCluster(fqName string, gkeCluster *gkev1.Cluster, dryRun bool) (*cluster
 	}
 
 	c.client, err = client.New(c.RESTConfig, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+
+	c.cfg, err = c.loadConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +266,60 @@ func (c *cluster) evictNodes() error {
 	return nil
 }
 
+func getTimeFromConfig(cfg map[string]string, key string) (time.Time, error) {
+	if cfg == nil {
+		return time.Time{}, nil
+	}
+
+	t, exists := cfg[key]
+	if !exists {
+		return time.Time{}, nil
+	}
+
+	return dateparse.ParseStrict(t)
+}
+
+func (c *cluster) loadConfig() (clusterConfig, error) {
+	clusterCfg := clusterConfig{}
+	cfg := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "kube-system",
+			Name:      "gke-weekend-downscaler",
+		},
+	}
+
+	key, _ := client.ObjectKeyFromObject(cfg)
+	err := c.client.Get(context.TODO(), key, cfg)
+	if client.IgnoreNotFound(err) != nil {
+		return clusterCfg, err
+	}
+
+	clusterCfg.DisabledUntil, err = getTimeFromConfig(cfg.Data, "disabled-until")
+	if err != nil {
+		return clusterCfg, err
+	}
+	clusterCfg.ScaleUpAfter, err = getTimeFromConfig(cfg.Data, "scale-up-after")
+	if err != nil {
+		return clusterCfg, err
+	}
+	clusterCfg.ScaleDownAfter, err = getTimeFromConfig(cfg.Data, "scale-down-after")
+	if err != nil {
+		return clusterCfg, err
+	}
+	return clusterCfg, nil
+}
+
 func (c *cluster) ScaleDown() error {
+	now := time.Now()
+	if c.cfg.DisabledUntil.After(now) {
+		log.Printf("[%s] scale down disabled until %s by disabled-until config. skipping", c.FQName, c.cfg.DisabledUntil)
+		return nil
+	}
+	if c.cfg.ScaleDownAfter.After(now) {
+		log.Printf("[%s] scale down disabled until %s by scale-down-after config. skipping", c.FQName, c.cfg.ScaleDownAfter)
+		return nil
+	}
+
 	poolsInfo, err := c.nodePoolsInfo()
 	if err != nil {
 		return err
@@ -302,6 +370,17 @@ func (c *cluster) ScaleDown() error {
 }
 
 func (c *cluster) ScaleUp() error {
+	now := time.Now()
+	if c.cfg.DisabledUntil.After(now) {
+		log.Printf("[%s] scale up disabled until %s by disabled-until config. skipping", c.FQName, c.cfg.DisabledUntil)
+		return nil
+	}
+
+	if c.cfg.ScaleUpAfter.After(now) {
+		log.Printf("[%s] scale up disabled until %s by scale-down-after config. skipping", c.FQName, c.cfg.ScaleUpAfter)
+		return nil
+	}
+
 	poolCfg := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "kube-system",
