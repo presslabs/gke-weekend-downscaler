@@ -1,4 +1,4 @@
-package cluster
+package downscaler
 
 import (
 	"context"
@@ -18,12 +18,12 @@ var (
 )
 
 const (
-	GoogleAuthPlugin = "google" // so that this is different than "gcp" that's already in client-go tree.
+	googleAuthPlugin = "google" // so that this is different than "gcp" that's already in client-go tree.
 )
 
 func init() {
-	if err := rest.RegisterAuthProviderPlugin(GoogleAuthPlugin, NewGoogleAuthProvider); err != nil {
-		log.Fatalf("Failed to register %s auth plugin: %v", GoogleAuthPlugin, err)
+	if err := rest.RegisterAuthProviderPlugin(googleAuthPlugin, newGoogleAuthProvider); err != nil {
+		log.Fatalf("Failed to register %s auth plugin: %v", googleAuthPlugin, err)
 	}
 }
 
@@ -41,7 +41,7 @@ func (g *googleAuthProvider) WrapTransport(rt http.RoundTripper) http.RoundTripp
 }
 func (g *googleAuthProvider) Login() error { return nil }
 
-func NewGoogleAuthProvider(addr string, config map[string]string, persister rest.AuthProviderConfigPersister) (rest.AuthProvider, error) {
+func newGoogleAuthProvider(addr string, config map[string]string, persister rest.AuthProviderConfigPersister) (rest.AuthProvider, error) {
 	ts, err := google.DefaultTokenSource(context.TODO(), googleScopes...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create google token source: %+v", err)
