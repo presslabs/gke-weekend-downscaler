@@ -162,7 +162,7 @@ func (c *cluster) disableAutoscaling(pool *gkev1.NodePool) error {
 		if err != nil {
 			return err
 		}
-		err = c.waitForOperation(op, 300*time.Second, "DONE")
+		err = c.waitForOperation(op, 900*time.Second, "DONE")
 		if err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func (c *cluster) reenableAutoscaling(pool *gkev1.NodePool, poolInfo nodePoolInf
 		if err != nil {
 			return err
 		}
-		err = c.waitForOperation(op, 300*time.Second, "DONE")
+		err = c.waitForOperation(op, 1800*time.Second, "DONE")
 		if err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ func (c *cluster) scaleDownPool(pool *gkev1.NodePool) error {
 		if err != nil {
 			return err
 		}
-		err = c.waitForOperation(op, 900*time.Second, "DONE")
+		err = c.waitForOperation(op, 1800*time.Second, "DONE")
 		if err != nil {
 			return err
 		}
@@ -355,7 +355,7 @@ func (c *cluster) ScaleDown() error {
 			return err
 		}
 		if len(nodes.Items) != 0 {
-			return fmt.Errorf("kube-system/gke-weekend-downscaler-pool-config exists but %d nodes still exist", len(nodes.Items))
+			return fmt.Errorf("[%s] kube-system/gke-weekend-downscaler-pool-config exists but %d nodes still exist", c.FQName, len(nodes.Items))
 		} else {
 			log.Printf("[%s] cluster already scaled down. skipping", c.FQName)
 			return nil
