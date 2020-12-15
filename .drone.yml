@@ -30,6 +30,7 @@ steps:
       -m '**/testing-reactor/*'
       -m '*folders/194394879849/**'
       -m '**/dashboard-staging-reactor/*'
+      -m '**/press-labs-dashboard/*'
   when:
     event:
     - cron
